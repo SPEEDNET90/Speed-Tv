@@ -28,21 +28,24 @@ jobs:
         with:
           gradle-version: "8.11.1"
 
-      - name: Fix JVM compatibility
+      - name: Force Java and Kotlin to JVM 17
         working-directory: Speed-TV-Android
+        shell: bash
         run: |
-          cat > fix.gradle <<'EOF'
-          allprojects {
-              tasks.withType(JavaCompile).configureEach {
-                  sourceCompatibility = '17'
-                  targetCompatibility = '17'
-              }
+          cat > force-jvm.gradle <<'EOF'
+          gradle.projectsEvaluated {
+              allprojects {
+                  tasks.withType(JavaCompile).configureEach {
+                      sourceCompatibility = "17"
+                      targetCompatibility = "17"
+                  }
 
-              tasks.configureEach {
-                  if (name.toLowerCase().contains('kotlin')) {
-                      try {
-                          kotlinOptions.jvmTarget = '17'
-                      } catch (Exception ignored) {
+                  tasks.configureEach {
+                      if (name.contains("Kotlin", true)) {
+                          try {
+                              kotlinOptions.jvmTarget = "17"
+                          } catch (Exception ignored) {
+                          }
                       }
                   }
               }
@@ -51,7 +54,7 @@ jobs:
 
       - name: Build APK
         working-directory: Speed-TV-Android
-        run: gradle -I fix.gradle assembleDebug
+        run: gradle -I force-jvm.gradle assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
