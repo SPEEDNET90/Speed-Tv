@@ -28,20 +28,20 @@ jobs:
         with:
           gradle-version: "8.11.1"
 
-      - name: Fix JVM
+      - name: Fix JVM compatibility
         working-directory: Speed-TV-Android
         run: |
           cat > force-jvm.gradle <<'EOF'
           allprojects {
               tasks.withType(JavaCompile).configureEach {
-                  sourceCompatibility = "17"
-                  targetCompatibility = "17"
+                  sourceCompatibility = "1.8"
+                  targetCompatibility = "1.8"
               }
 
               tasks.configureEach {
                   if (name.toLowerCase().contains("kotlin")) {
                       try {
-                          kotlinOptions.jvmTarget = "17"
+                          kotlinOptions.jvmTarget = "1.8"
                       } catch (Exception ignored) {
                       }
                   }
