@@ -1,60 +1,1190 @@
-name: Build Speed TV APK
+package com.skyiptv.app
 
-on:
-  workflow_dispatch:
-  push:
-    branches:
-      - main
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items as rowItems
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.common.MediaItem
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
+private data class Channel(
+    val name: String,
+    val url: String
+)
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+private val Navy = Color(0xFF020D19)
+private val Card = Color(0xFF0A1D2E)
+private val Card2 = Color(0xFF10283C)
+private val Blue = Color(0xFF159EFF)
+private val LightBlue = Color(0xFF47B9FF)
+private val Gray = Color(0xFF91A4B7)
+private val Red = Color(0xFFFF4050)
 
-      - name: Extract project
-        run: unzip -q Speed-TV-Android.zip
+private val categories = listOf(
+    "الكل",
+    "رياضة",
+    "عراقية",
+    "MBC",
+    "أفلام",
+    "ترفيه",
+    "إخبارية"
+)
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
+class MainActivity : ComponentActivity() {
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "8.11.1"
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
 
-      - name: Fix JVM compatibility
-        working-directory: Speed-TV-Android
-        run: |
-          cat > force-jvm.gradle <<'EOF'
-          allprojects {
-              tasks.withType(JavaCompile).configureEach {
-                  sourceCompatibility = "1.8"
-                  targetCompatibility = "1.8"
-              }
+        setContent {
+            SpeedTvApp()
+        }
+    }
+}
 
-              tasks.configureEach {
-                  if (name.toLowerCase().contains("kotlin")) {
-                      try {
-                          kotlinOptions.jvmTarget = "1.8"
-                      } catch (Exception ignored) {
-                      }
-                  }
-              }
-          }
-          EOF
+@Composable
+private fun SpeedTvApp() {
 
-      - name: Build APK
-        working-directory: Speed-TV-Android
-        run: gradle -I force-jvm.gradle assembleDebug
+    MaterialTheme(
+        colorScheme = darkColorScheme(
+            primary = Blue,
+            background = Navy,
+            surface = Card
+        )
+    ) {
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: Speed-TV-APK
-          path: Speed-TV-Android/app/build/outputs/apk/debug/app-debug.apk
+        CompositionLocalProvider(
+            androidx.compose.ui.platform.LocalLayoutDirection
+                provides LayoutDirection.Rtl
+        ) {
+
+            SpeedTvHome()
+        }
+    }
+}
+
+@Composable
+private fun SpeedTvHome() {
+
+    val context = LocalContext.current
+
+    val channels = remember {
+        loadChannels(context)
+    }
+
+    var selectedChannel by remember {
+        mutableStateOf<Channel?>(null)
+    }
+
+    var selectedCategory by remember {
+        mutableStateOf("الكل")
+    }
+
+    var search by remember {
+        mutableStateOf("")
+    }
+
+    var bottomTab by remember {
+        mutableStateOf(0)
+    }
+
+    val favorites = remember {
+        mutableStateListOf<String>()
+    }
+
+    if (selectedChannel != null) {
+
+        PlayerScreen(
+            channel = selectedChannel!!,
+            onBack = {
+                selectedChannel = null
+            }
+        )
+
+        return
+    }
+
+    val filteredChannels = channels.filter { channel ->
+
+        val categoryOK =
+            categoryMatches(
+                channel,
+                selectedCategory
+            )
+
+        val searchOK =
+            search.isBlank() ||
+                    channel.name.contains(
+                        search,
+                        true
+                    )
+
+        val favoriteOK =
+            bottomTab != 2 ||
+                    favorites.contains(channel.name)
+
+        categoryOK &&
+                searchOK &&
+                favoriteOK
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Navy)
+    ) {
+
+        /* HEADER */
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(
+                    start = 22.dp,
+                    end = 22.dp,
+                    top = 18.dp,
+                    bottom = 10.dp
+                ),
+
+            verticalAlignment =
+                Alignment.CenterVertically
+        ) {
+
+            Text(
+                "⌕",
+                color = Color.White,
+                fontSize = 38.sp
+            )
+
+            Spacer(
+                modifier = Modifier.weight(1f)
+            )
+
+            Row(
+                verticalAlignment =
+                    Alignment.CenterVertically
+            ) {
+
+                Text(
+                    "TV",
+                    color = Blue,
+                    fontSize = 36.sp,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Spacer(
+                    modifier = Modifier.width(7.dp)
+                )
+
+                Text(
+                    "Speed",
+                    color = Color.White,
+                    fontSize = 36.sp,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Spacer(
+                    modifier = Modifier.width(15.dp)
+                )
+
+                Box(
+                    modifier = Modifier
+                        .size(58.dp)
+                        .background(
+                            Brush.linearGradient(
+                                listOf(
+                                    Blue,
+                                    Color(0xFF0068D9)
+                                )
+                            ),
+                            RoundedCornerShape(17.dp)
+                        ),
+
+                    contentAlignment =
+                        Alignment.Center
+                ) {
+
+                    Text(
+                        "▶",
+                        color = Color.White,
+                        fontSize = 29.sp
+                    )
+                }
+            }
+        }
+
+        /* CONTENT */
+
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp)
+        ) {
+
+            /* HERO */
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(185.dp)
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(
+                                Color(0xFF17649B),
+                                Color(0xFF061522)
+                            )
+                        ),
+                        RoundedCornerShape(25.dp)
+                    )
+                    .padding(25.dp)
+            ) {
+
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalAlignment =
+                        Alignment.End,
+
+                    verticalArrangement =
+                        Arrangement.Center
+                ) {
+
+                    Text(
+                        "مباشر الآن",
+                        color = LightBlue,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Spacer(
+                        modifier =
+                            Modifier.height(5.dp)
+                    )
+
+                    Text(
+                        "Speed TV",
+                        color = Color.White,
+                        fontSize = 40.sp,
+                        fontWeight =
+                            FontWeight.ExtraBold
+                    )
+
+                    Text(
+                        "قنواتك المفضلة في مكان واحد",
+                        color = Color.White,
+                        fontSize = 17.sp
+                    )
+
+                    Spacer(
+                        modifier =
+                            Modifier.height(10.dp)
+                    )
+
+                    Surface(
+                        color = Blue,
+                        shape =
+                            RoundedCornerShape(15.dp)
+                    ) {
+
+                        Text(
+                            "شاهد الآن  ▶",
+                            color = Color.White,
+
+                            modifier =
+                                Modifier.padding(
+                                    horizontal = 25.dp,
+                                    vertical = 9.dp
+                                ),
+
+                            fontWeight =
+                                FontWeight.Bold,
+
+                            fontSize = 14.sp
+                        )
+                    }
+                }
+            }
+
+            Spacer(
+                modifier = Modifier.height(17.dp)
+            )
+
+            /* TITLE */
+
+            Text(
+                "التصنيفات",
+                color = Color.White,
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
+
+                modifier =
+                    Modifier.fillMaxWidth(),
+
+                textAlign =
+                    TextAlign.End
+            )
+
+            Spacer(
+                modifier = Modifier.height(10.dp)
+            )
+
+            /* CATEGORIES */
+
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement =
+                    Arrangement.spacedBy(10.dp)
+            ) {
+
+                rowItems(categories) { category ->
+
+                    CategoryCard(
+                        name = category,
+                        selected =
+                            category ==
+                                    selectedCategory,
+
+                        onClick = {
+                            selectedCategory =
+                                category
+
+                            bottomTab = 0
+                        }
+                    )
+                }
+            }
+
+            Spacer(
+                modifier = Modifier.height(18.dp)
+            )
+
+            /* CHANNEL HEADER */
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment =
+                    Alignment.CenterVertically
+            ) {
+
+                Text(
+                    "${filteredChannels.size} قناة",
+                    color = Gray,
+                    fontSize = 17.sp
+                )
+
+                Spacer(
+                    modifier = Modifier.weight(1f)
+                )
+
+                Text(
+                    if (bottomTab == 2)
+                        "المفضلة"
+                    else
+                        "القنوات المتاحة",
+
+                    color = Color.White,
+                    fontSize = 27.sp,
+                    fontWeight =
+                        FontWeight.Bold
+                )
+            }
+
+            Spacer(
+                modifier = Modifier.height(10.dp)
+            )
+
+            /* SEARCH */
+
+            OutlinedTextField(
+                value = search,
+
+                onValueChange = {
+                    search = it
+                },
+
+                modifier =
+                    Modifier.fillMaxWidth(),
+
+                singleLine = true,
+
+                placeholder = {
+
+                    Text(
+                        "إبحث عن قناة",
+                        color = Gray,
+                        fontSize = 18.sp
+                    )
+                },
+
+                trailingIcon = {
+
+                    Text(
+                        "⌕",
+                        color = Gray,
+                        fontSize = 27.sp
+                    )
+                },
+
+                colors =
+                    OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor =
+                            Color(0xFF173C59),
+
+                        unfocusedBorderColor =
+                            Color(0xFF173C59),
+
+                        focusedTextColor =
+                            Color.White,
+
+                        unfocusedTextColor =
+                            Color.White,
+
+                        cursorColor =
+                            Blue
+                    ),
+
+                shape =
+                    RoundedCornerShape(8.dp)
+            )
+
+            Spacer(
+                modifier = Modifier.height(10.dp)
+            )
+
+            /* CHANNEL LIST */
+
+            LazyColumn(
+                modifier =
+                    Modifier.fillMaxSize(),
+
+                verticalArrangement =
+                    Arrangement.spacedBy(10.dp),
+
+                contentPadding =
+                    PaddingValues(
+                        bottom = 12.dp
+                    )
+            ) {
+
+                items(
+                    filteredChannels
+                ) { channel ->
+
+                    ChannelCard(
+                        channel = channel,
+
+                        favorite =
+                            favorites.contains(
+                                channel.name
+                            ),
+
+                        onFavorite = {
+
+                            if (
+                                favorites.contains(
+                                    channel.name
+                                )
+                            ) {
+                                favorites.remove(
+                                    channel.name
+                                )
+                            } else {
+                                favorites.add(
+                                    channel.name
+                                )
+                            }
+                        },
+
+                        onPlay = {
+                            selectedChannel =
+                                channel
+                        }
+                    )
+                }
+
+                if (filteredChannels.isEmpty()) {
+
+                    item {
+
+                        Box(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(30.dp),
+
+                            contentAlignment =
+                                Alignment.Center
+                        ) {
+
+                            Text(
+                                "لا توجد قنوات",
+                                color = Gray,
+                                fontSize = 17.sp
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        /* BOTTOM NAV */
+
+        BottomNavigation(
+            selected = bottomTab,
+            onSelect = {
+                bottomTab = it
+            }
+        )
+    }
+}
+
+@Composable
+private fun CategoryCard(
+    name: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+
+    Box(
+        modifier = Modifier
+            .width(145.dp)
+            .height(132.dp)
+            .background(
+                if (selected)
+                    Color(0xFF147DB8)
+                else
+                    Card,
+
+                RoundedCornerShape(22.dp)
+            )
+            .clickable {
+                onClick()
+            },
+
+        contentAlignment =
+            Alignment.Center
+    ) {
+
+        Column(
+            horizontalAlignment =
+                Alignment.CenterHorizontally,
+
+            verticalArrangement =
+                Arrangement.Center
+        ) {
+
+            Text(
+                categoryIcon(name),
+                fontSize = 38.sp
+            )
+
+            Spacer(
+                modifier =
+                    Modifier.height(5.dp)
+            )
+
+            Text(
+                name,
+                color = Color.White,
+                fontSize = 17.sp,
+                fontWeight =
+                    FontWeight.Medium
+            )
+        }
+    }
+}
+
+@Composable
+private fun ChannelCard(
+    channel: Channel,
+    favorite: Boolean,
+    onFavorite: () -> Unit,
+    onPlay: () -> Unit
+) {
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(112.dp)
+            .background(
+                Card,
+                RoundedCornerShape(22.dp)
+            )
+            .clickable {
+                onPlay()
+            }
+            .padding(10.dp),
+
+        verticalAlignment =
+            Alignment.CenterVertically
+    ) {
+
+        /* FAVORITE */
+
+        Box(
+            modifier = Modifier
+                .width(70.dp)
+                .fillMaxHeight(),
+
+            contentAlignment =
+                Alignment.Center
+        ) {
+
+            Text(
+                if (favorite)
+                    "♥"
+                else
+                    "♡",
+
+                color =
+                    if (favorite)
+                        Color.Red
+                    else
+                        Color.White,
+
+                fontSize = 38.sp,
+
+                modifier =
+                    Modifier.clickable {
+                        onFavorite()
+                    }
+            )
+        }
+
+        /* CHANNEL INFO */
+
+        Column(
+            modifier =
+                Modifier.weight(1f),
+
+            horizontalAlignment =
+                Alignment.End,
+
+            verticalArrangement =
+                Arrangement.Center
+        ) {
+
+            Text(
+                displayName(channel.name),
+                color = Color.White,
+                fontSize = 23.sp,
+                fontWeight =
+                    FontWeight.Bold,
+                maxLines = 1
+            )
+
+            Row(
+                verticalAlignment =
+                    Alignment.CenterVertically
+            ) {
+
+                Text(
+                    "مباشر الآن",
+                    color = Blue,
+                    fontSize = 14.sp
+                )
+
+                Spacer(
+                    modifier =
+                        Modifier.width(6.dp)
+                )
+
+                Box(
+                    modifier = Modifier
+                        .size(9.dp)
+                        .background(
+                            Red,
+                            RoundedCornerShape(50)
+                        )
+                )
+            }
+        }
+
+        Spacer(
+            modifier = Modifier.width(10.dp)
+        )
+
+        /* LOGO */
+
+        Box(
+            modifier = Modifier
+                .width(90.dp)
+                .fillMaxHeight()
+                .background(
+                    Color(0xFF122E47),
+                    RoundedCornerShape(16.dp)
+                ),
+
+            contentAlignment =
+                Alignment.Center
+        ) {
+
+            Text(
+                channelBadge(channel.name),
+                color = Blue,
+                fontSize = 17.sp,
+                fontWeight =
+                    FontWeight.ExtraBold,
+                textAlign =
+                    TextAlign.Center
+            )
+        }
+    }
+}
+
+@Composable
+private fun BottomNavigation(
+    selected: Int,
+    onSelect: (Int) -> Unit
+) {
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(78.dp)
+            .background(
+                Color(0xFF071522)
+            ),
+
+        horizontalArrangement =
+            Arrangement.SpaceEvenly,
+
+        verticalAlignment =
+            Alignment.CenterVertically
+    ) {
+
+        BottomItem(
+            icon = "⚙",
+            title = "الإعدادات",
+            active = selected == 4
+        ) {
+            onSelect(4)
+        }
+
+        BottomItem(
+            icon = "⌕",
+            title = "البحث",
+            active = selected == 3
+        ) {
+            onSelect(3)
+        }
+
+        BottomItem(
+            icon = "♥",
+            title = "المفضلة",
+            active = selected == 2
+        ) {
+            onSelect(2)
+        }
+
+        BottomItem(
+            icon = "▣",
+            title = "مباشر",
+            active = selected == 1
+        ) {
+            onSelect(1)
+        }
+
+        BottomItem(
+            icon = "⌂",
+            title = "الرئيسية",
+            active = selected == 0
+        ) {
+            onSelect(0)
+        }
+    }
+}
+
+@Composable
+private fun BottomItem(
+    icon: String,
+    title: String,
+    active: Boolean,
+    onClick: () -> Unit
+) {
+
+    Column(
+        modifier =
+            Modifier
+                .clickable {
+                    onClick()
+                }
+                .padding(
+                    horizontal = 12.dp
+                ),
+
+        horizontalAlignment =
+            Alignment.CenterHorizontally
+    ) {
+
+        Text(
+            icon,
+
+            color =
+                if (active)
+                    Blue
+                else
+                    Gray,
+
+            fontSize =
+                if (title == "المفضلة")
+                    33.sp
+                else
+                    25.sp
+        )
+
+        Text(
+            title,
+
+            color =
+                if (active)
+                    Blue
+                else
+                    Gray,
+
+            fontSize = 11.sp
+        )
+    }
+}
+
+@Composable
+private fun PlayerScreen(
+    channel: Channel,
+    onBack: () -> Unit
+) {
+
+    val context =
+        LocalContext.current
+
+    val player =
+        remember(channel.url) {
+
+            ExoPlayer
+                .Builder(context)
+                .build()
+                .apply {
+
+                    setMediaItem(
+                        MediaItem.fromUri(
+                            channel.url
+                        )
+                    )
+
+                    prepare()
+
+                    playWhenReady = true
+                }
+        }
+
+    DisposableEffect(player) {
+
+        onDispose {
+            player.release()
+        }
+    }
+
+    Column(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+    ) {
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Color(0xFF071522)
+                )
+                .padding(10.dp),
+
+            verticalAlignment =
+                Alignment.CenterVertically
+        ) {
+
+            Text(
+                "‹",
+                color = Color.White,
+                fontSize = 40.sp,
+
+                modifier =
+                    Modifier.clickable {
+                        onBack()
+                    }
+            )
+
+            Spacer(
+                modifier =
+                    Modifier.width(10.dp)
+            )
+
+            Text(
+                displayName(channel.name),
+                color = Color.White,
+                fontSize = 20.sp,
+                fontWeight =
+                    FontWeight.Bold
+            )
+        }
+
+        AndroidView(
+            factory = {
+
+                PlayerView(it).apply {
+
+                    this.player =
+                        player
+
+                    useController =
+                        true
+                }
+            },
+
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+        )
+    }
+}
+
+private fun categoryIcon(
+    name: String
+): String {
+
+    return when (name) {
+
+        "رياضة" ->
+            "⚽"
+
+        "عراقية" ->
+            "🇮🇶"
+
+        "MBC" ->
+            "MBC"
+
+        "أفلام" ->
+            "🎬"
+
+        "ترفيه" ->
+            "⭐"
+
+        "إخبارية" ->
+            "📰"
+
+        else ->
+            "📺"
+    }
+}
+
+private fun channelBadge(
+    name: String
+): String {
+
+    return when {
+
+        name.contains(
+            "Bein",
+            true
+        ) ->
+            "beIN\nSPORT"
+
+        name.contains(
+            "MBC",
+            true
+        ) ->
+            "MBC"
+
+        name.contains(
+            "SSC",
+            true
+        ) ->
+            "SSC"
+
+        name.contains(
+            "SHARQYIA",
+            true
+        ) ->
+            "الشرقية"
+
+        name.contains(
+            "IRAQYIA",
+            true
+        ) ->
+            "العراقية"
+
+        else ->
+            "TV"
+    }
+}
+
+private fun displayName(
+    name: String
+): String {
+
+    return name.replace(
+        '-',
+        ' '
+    )
+}
+
+private fun categoryMatches(
+    channel: Channel,
+    category: String
+): Boolean {
+
+    return when (category) {
+
+        "رياضة" ->
+            listOf(
+                "Bein",
+                "SPORT",
+                "AD-SPORT",
+                "SSC",
+                "Al-Kass"
+            ).any {
+                channel.name.contains(
+                    it,
+                    true
+                )
+            }
+
+        "عراقية" ->
+            listOf(
+                "SHARQYIA",
+                "SUMRYIA",
+                "BAGHDAD",
+                "IRAQYIA"
+            ).any {
+                channel.name.contains(
+                    it,
+                    true
+                )
+            }
+
+        "MBC" ->
+            channel.name.startsWith(
+                "MBC",
+                true
+            )
+
+        "أفلام" ->
+            listOf(
+                "MOVIES",
+                "Film",
+                "Showcase",
+                "OSN-MAZZE"
+            ).any {
+                channel.name.contains(
+                    it,
+                    true
+                )
+            }
+
+        "ترفيه" ->
+            listOf(
+                "MTV",
+                "TLC",
+                "OSN-LIVING"
+            ).any {
+                channel.name.contains(
+                    it,
+                    true
+                )
+            }
+
+        "إخبارية" ->
+            listOf(
+                "NEWS",
+                "IRAQYIA-NEWS",
+                "SHARQYIA-NEWS"
+            ).any {
+                channel.name.contains(
+                    it,
+                    true
+                )
+            }
+
+        else ->
+            true
+    }
+}
+
+private fun loadChannels(
+    context: android.content.Context
+): List<Channel> {
+
+    val text =
+        context.resources
+            .openRawResource(
+                com.skyiptv.app.R.raw.channels
+            )
+            .bufferedReader()
+            .use {
+                it.readText()
+            }
+
+    val lines =
+        text.lines()
+
+    val result =
+        mutableListOf<Channel>()
+
+    var name = ""
+
+    for (line in lines) {
+
+        when {
+
+            line.startsWith(
+                "#EXTINF"
+            ) -> {
+
+                name =
+                    line
+                        .substringAfterLast(',')
+                        .trim()
+            }
+
+            line.isNotBlank() &&
+                    !line.startsWith("#") -> {
+
+                if (name.isNotBlank()) {
+
+                    result.add(
+                        Channel(
+                            name = name,
+                            url = line.trim()
+                        )
+                    )
+
+                    name = ""
+                }
+            }
+        }
+    }
+
+    return result.distinctBy {
+        it.name + it.url
+    }
+}
